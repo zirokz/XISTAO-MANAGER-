@@ -17,8 +17,15 @@ const el = {
   herName: document.getElementById("herName"),
   chat: document.getElementById("chat"),
   chatImage: document.getElementById("chatImage"),
+  chatImagePreview: document.getElementById("chatImagePreview"),
   ocrStatus: document.getElementById("ocrStatus"),
   ocrExtract: document.getElementById("ocrExtract"),
+  ocrPaste: document.getElementById("ocrPaste"),
+  profileImage: document.getElementById("profileImage"),
+  profileImagePreview: document.getElementById("profileImagePreview"),
+  profileOcrStatus: document.getElementById("profileOcrStatus"),
+  profileOcrExtract: document.getElementById("profileOcrExtract"),
+  profileOcrPaste: document.getElementById("profileOcrPaste"),
   place: document.getElementById("place"),
   dateType: document.getElementById("dateType"),
   budget: document.getElementById("budget"),
@@ -265,9 +272,30 @@ function detectIGTopic(story) {
   return { label: "geral", q: "qual foi a melhor parte disso?" };
 }
 
+function setStatus(node, text) {
+  if (!node) return;
+  node.textContent = normalizeText(text);
+}
+
+async function pasteClipboardText() {
+  if (!window.isSecureContext || !navigator.clipboard?.readText) {
+    return { ok: false, error: "Seu navegador não permite colar texto automaticamente aqui. Cole manualmente." };
+  }
+  try {
+    const text = await navigator.clipboard.readText();
+    if (!normalizeText(text)) return { ok: false, error: "A área de transferência está vazia." };
+    return { ok: true, text };
+  } catch {
+    return { ok: false, error: "Permita acesso ao Clipboard e tente de novo." };
+  }
+}
+
 function setOcrStatus(text) {
-  if (!el.ocrStatus) return;
-  el.ocrStatus.textContent = normalizeText(text);
+  setStatus(el.ocrStatus, text);
+}
+
+function setProfileOcrStatus(text) {
+  setStatus(el.profileOcrStatus, text);
 }
 
 function setCaseStatus(text) {
@@ -399,6 +427,26 @@ async function ocrUsingTextDetector(file) {
   }
 }
 
+const previewUrls = {
+  chat: "",
+  profile: "",
+};
+
+function updateImagePreview(kind, file, imgEl) {
+  if (!imgEl) return;
+  if (previewUrls[kind]) URL.revokeObjectURL(previewUrls[kind]);
+  previewUrls[kind] = "";
+  if (!file) {
+    imgEl.src = "";
+    imgEl.classList.add("hidden");
+    return;
+  }
+  const url = URL.createObjectURL(file);
+  previewUrls[kind] = url;
+  imgEl.src = url;
+  imgEl.classList.remove("hidden");
+}
+
 async function extractChatFromImage() {
   const file = el.chatImage?.files?.[0];
   if (!file) {
@@ -410,7 +458,7 @@ async function extractChatFromImage() {
   try {
     const text = await ocrUsingTextDetector(file);
     if (!text) {
-      setOcrStatus("OCR não suportado aqui. Use Google Lens/ iOS Live Text pra copiar o texto e cole em “Conversa”.");
+      setOcrStatus("OCR não suportado aqui. No iPhone, toque e segure no texto do print (Live Text) e cole em “Conversa”.");
       return;
     }
     el.chat.value = text;
@@ -430,6 +478,30 @@ async function extractChatFromImage() {
     setOcrStatus("Texto extraído. Dica: marque Eu:/Ela: na conversa pra melhorar a análise.");
   } catch {
     setOcrStatus("Não consegui extrair. Tente outra imagem ou use copiar/colar do Lens.");
+  }
+}
+
+async function extractProfileFromImage() {
+  const file = el.profileImage?.files?.[0];
+  if (!file) {
+    setProfileOcrStatus("Selecione uma imagem primeiro.");
+    return;
+  }
+
+  setProfileOcrStatus("Extraindo texto…");
+  try {
+    const text = await ocrUsingTextDetector(file);
+    if (!text) {
+      setProfileOcrStatus("OCR não suportado aqui. No iPhone, toque e segure no texto do print (Live Text) e cole em “Gancho do perfil dela”.");
+      return;
+    }
+    const current = normalizeText(el.profile.value);
+    el.profile.value = current ? `${current}\n${text}` : text;
+    scheduleSave();
+    generate();
+    setProfileOcrStatus("Texto extraído e colocado no gancho do perfil.");
+  } catch {
+    setProfileOcrStatus("Não consegui extrair. Tente outra imagem ou use copiar/colar do Live Text.");
   }
 }
 
@@ -2377,12 +2449,74 @@ el.reset.addEventListener("click", clearState);
 if (el.chatImage) {
   el.chatImage.addEventListener("change", () => {
     const file = el.chatImage.files?.[0];
-    setOcrStatus(file ? `Imagem selecionada: ${file.name}` : "");
+    updateImagePreview("chat", file ?? null, el.chatImagePreview);
+    if (!file) {
+      setOcrStatus("");
+      return;
+    }
+    const canOcr = "TextDetector" in window;
+    setOcrStatus(
+      canOcr
+        ? `Imagem selecionada: ${file.name}`
+        : `Imagem selecionada: ${file.name}. No iPhone, toque e segure no texto do print (Live Text) e cole em “Conversa”.`
+    );
+    if (canOcr) extractChatFromImage();
   });
 }
 
 if (el.ocrExtract) {
   el.ocrExtract.addEventListener("click", extractChatFromImage);
+}
+
+if (el.ocrPaste) {
+  el.ocrPaste.addEventListener("click", async () => {
+    const res = await pasteClipboardText();
+    if (!res.ok) {
+      setOcrStatus(res.error);
+      return;
+    }
+    el.chat.value = res.text;
+    scheduleSave();
+    generate();
+    setOcrStatus("Texto colado no campo Conversa.");
+  });
+}
+
+if (el.profileImage) {
+  el.profileImage.addEventListener("change", () => {
+    const file = el.profileImage.files?.[0];
+    updateImagePreview("profile", file ?? null, el.profileImagePreview);
+    if (!file) {
+      setProfileOcrStatus("");
+      return;
+    }
+    const canOcr = "TextDetector" in window;
+    setProfileOcrStatus(
+      canOcr
+        ? `Imagem selecionada: ${file.name}`
+        : `Imagem selecionada: ${file.name}. No iPhone, toque e segure no texto do print (Live Text) e cole em “Gancho do perfil dela”.`
+    );
+    if (canOcr) extractProfileFromImage();
+  });
+}
+
+if (el.profileOcrExtract) {
+  el.profileOcrExtract.addEventListener("click", extractProfileFromImage);
+}
+
+if (el.profileOcrPaste) {
+  el.profileOcrPaste.addEventListener("click", async () => {
+    const res = await pasteClipboardText();
+    if (!res.ok) {
+      setProfileOcrStatus(res.error);
+      return;
+    }
+    const current = normalizeText(el.profile.value);
+    el.profile.value = current ? `${current}\n${res.text}` : res.text;
+    scheduleSave();
+    generate();
+    setProfileOcrStatus("Texto colado no Gancho do perfil.");
+  });
 }
 
 let savedCases = loadCases();
@@ -2569,10 +2703,14 @@ function clearSensitiveFields() {
   if (el.herName) el.herName.value = "";
   el.chat.value = "";
   if (el.chatImage) el.chatImage.value = "";
+  if (el.profileImage) el.profileImage.value = "";
+  updateImagePreview("chat", null, el.chatImagePreview);
+  updateImagePreview("profile", null, el.profileImagePreview);
   if (el.googleApiKey) el.googleApiKey.value = "";
   if (el.showGoogleApiKey) el.showGoogleApiKey.checked = false;
   if (el.googleApiKey) el.googleApiKey.type = "password";
   setOcrStatus("");
+  setProfileOcrStatus("");
 }
 
 if (el.clearSensitive) {
@@ -2641,6 +2779,51 @@ if ("serviceWorker" in navigator) {
       updateInstallHints();
     }
   });
+}
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    window.location.reload();
+  });
+}
+
+async function checkForAppUpdate() {
+  if (!("serviceWorker" in navigator)) {
+    setInstallStatus("Sem service worker. Recarregando…");
+    window.location.reload();
+    return;
+  }
+  try {
+    setInstallStatus("Verificando atualização…");
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg) {
+      setInstallStatus("Sem registro de service worker. Recarregando…");
+      window.location.reload();
+      return;
+    }
+    await reg.update();
+    if (reg.waiting) {
+      reg.waiting.postMessage({ type: "SKIP_WAITING" });
+      setInstallStatus("Atualizando app…");
+      return;
+    }
+    if (reg.installing) {
+      reg.installing.addEventListener("statechange", () => {
+        if (reg.installing && reg.installing.state === "installed") {
+          if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
+          setInstallStatus("Atualizando app…");
+        }
+      });
+      return;
+    }
+    setInstallStatus("Nenhuma atualização encontrada.");
+  } catch {
+    setInstallStatus("Falha ao verificar atualização.");
+  }
+}
+
+if (el.checkUpdate) {
+  el.checkUpdate.addEventListener("click", checkForAppUpdate);
 }
 
 applyState(loadState());

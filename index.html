@@ -117,18 +117,44 @@
           </div>
 
           <label class="field">
+            <span class="label">Print da conversa (recomendado)</span>
+            <input id="chatImage" type="file" accept="image/*" capture="environment" />
+            <div class="row">
+              <div class="ocrStatus" id="ocrStatus"></div>
+              <div class="btnRow">
+                <button id="ocrExtract" class="ghost" type="button">Extrair texto</button>
+                <button id="ocrPaste" class="ghost" type="button">Colar texto</button>
+              </div>
+            </div>
+            <img id="chatImagePreview" class="imagePreview hidden" alt="Preview do print da conversa" />
+          </label>
+
+          <label class="field">
+            <span class="label">Print do perfil dela (recomendado)</span>
+            <input id="profileImage" type="file" accept="image/*" capture="environment" />
+            <div class="row">
+              <div class="ocrStatus" id="profileOcrStatus"></div>
+              <div class="btnRow">
+                <button id="profileOcrExtract" class="ghost" type="button">Extrair texto</button>
+                <button id="profileOcrPaste" class="ghost" type="button">Colar texto</button>
+              </div>
+            </div>
+            <img id="profileImagePreview" class="imagePreview hidden" alt="Preview do print do perfil" />
+          </label>
+
+          <label class="field">
             <span class="label">Gancho do perfil dela (bio + detalhes das fotos)</span>
-            <textarea id="profile" rows="3" placeholder="Ex.: Bio: ‘café e trilha’. Foto: praia, livro, cachorro…"></textarea>
+            <textarea id="profile" rows="3" placeholder="Ex.: Bio: ‘café e trilha’. Foto: praia, livro, cachorro…" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
           </label>
 
           <label class="field hidden" id="igStoryField">
             <span class="label">Instagram: story/assunto que você vai responder (opcional)</span>
-            <textarea id="igStory" rows="3" placeholder="Ex.: Foto do café / show ontem / viagem / treino / texto do story…"></textarea>
+            <textarea id="igStory" rows="3" placeholder="Ex.: Foto do café / show ontem / viagem / treino / texto do story…" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
           </label>
 
           <label class="field">
             <span class="label">Última mensagem dela (opcional, pra gerar mais rápido)</span>
-            <textarea id="lastHer" rows="2" placeholder="Ex.: ‘kkkk gostei’ ou ‘e você, mora onde?’"></textarea>
+            <textarea id="lastHer" rows="2" placeholder="Ex.: ‘kkkk gostei’ ou ‘e você, mora onde?’" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
           </label>
 
           <label class="field hidden" id="noReplyField">
@@ -157,6 +183,9 @@
             <textarea
               id="chat"
               rows="8"
+              autocapitalize="off"
+              autocorrect="off"
+              spellcheck="false"
               placeholder="Dica: comece as linhas com “Eu:” e “Ela:”
 Ex.:
 Eu: Oi, achei teu perfil massa
@@ -170,17 +199,6 @@ Ela: kkk valeu"
               <button id="clearSensitive" class="ghost" type="button">Limpar sensíveis</button>
             </div>
           </div>
-
-          <label class="field">
-            <span class="label">Print da conversa (opcional)</span>
-            <input id="chatImage" type="file" accept="image/*" />
-            <div class="row">
-              <div class="ocrStatus" id="ocrStatus"></div>
-              <div class="btnRow">
-                <button id="ocrExtract" class="ghost" type="button">Extrair texto</button>
-              </div>
-            </div>
-          </label>
 
           <div class="row">
             <label class="field small">
@@ -334,6 +352,11 @@ Ela: kkk valeu"
       </main>
 
       <footer class="footer">
+        <div class="row right">
+          <div class="btnRow">
+            <button id="checkUpdate" class="ghost" type="button">Atualizar app</button>
+          </div>
+        </div>
         <div id="installStatus" class="installStatus"></div>
       </footer>
     </div>
