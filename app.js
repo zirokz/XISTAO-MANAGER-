@@ -26,6 +26,10 @@ const el = {
   profileOcrStatus: document.getElementById("profileOcrStatus"),
   profileOcrExtract: document.getElementById("profileOcrExtract"),
   profileOcrPaste: document.getElementById("profileOcrPaste"),
+  platformTinder: document.getElementById("platformTinder"),
+  platformInstagram: document.getElementById("platformInstagram"),
+  toggleDetails: document.getElementById("toggleDetails"),
+  detailsFields: document.getElementById("detailsFields"),
   place: document.getElementById("place"),
   dateType: document.getElementById("dateType"),
   budget: document.getElementById("budget"),
@@ -54,6 +58,7 @@ const el = {
   options: document.getElementById("options"),
   winnerHint: document.getElementById("winnerHint"),
   copyWinner: document.getElementById("copyWinner"),
+  toggleAllOptions: document.getElementById("toggleAllOptions"),
   openWinnerWhatsApp: document.getElementById("openWinnerWhatsApp"),
   enableVariations: document.getElementById("enableVariations"),
   variationsBar: document.getElementById("variationsBar"),
@@ -81,11 +86,14 @@ const el = {
   placesOnlineList: document.getElementById("placesOnlineList"),
   copyInvite: document.getElementById("copyInvite"),
   openInviteWhatsApp: document.getElementById("openInviteWhatsApp"),
+  toggleExtras: document.getElementById("toggleExtras"),
+  checkUpdate: document.getElementById("checkUpdate"),
 };
 
 const STORAGE_KEY = "paquera_pwa_state_v1";
 const PLACE_SEARCH_CACHE_KEY = "paquera_place_search_cache_v1";
 const CASES_KEY = "paquera_cases_v1";
+const UI_KEY = "paquera_ui_v1";
 
 let variationsEnabled = false;
 let variationIndex = 0;
@@ -232,6 +240,117 @@ function updateVariationsUI() {
     if (!btn) continue;
     btn.classList.toggle("primary", enabled && idx === i);
   }
+}
+
+function loadUiPrefs() {
+  try {
+    const raw = localStorage.getItem(UI_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveUiPrefs(prefs) {
+  try {
+    localStorage.setItem(UI_KEY, JSON.stringify(prefs));
+  } catch {}
+}
+
+let detailsOpen = false;
+function setDetailsOpen(open) {
+  detailsOpen = Boolean(open);
+  toggleHidden(el.detailsFields, !detailsOpen);
+  if (el.toggleDetails) el.toggleDetails.textContent = detailsOpen ? "Fechar ajustes" : "Ajustes";
+  const prefs = loadUiPrefs();
+  prefs.detailsOpen = detailsOpen;
+  saveUiPrefs(prefs);
+}
+
+if (el.toggleDetails) {
+  el.toggleDetails.addEventListener("click", () => setDetailsOpen(!detailsOpen));
+}
+
+{
+  const prefs = loadUiPrefs();
+  const shouldOpen =
+    typeof prefs.detailsOpen === "boolean" ? prefs.detailsOpen : !window.matchMedia?.("(max-width: 760px)")?.matches;
+  setDetailsOpen(shouldOpen);
+}
+
+const extraCards = Array.from(document.querySelectorAll(".extraCard"));
+let extrasOpen = false;
+function setExtrasOpen(open) {
+  extrasOpen = Boolean(open);
+  for (const card of extraCards) toggleHidden(card, !extrasOpen);
+  if (el.toggleExtras) el.toggleExtras.textContent = extrasOpen ? "Fechar extras" : "Extras";
+  const prefs = loadUiPrefs();
+  prefs.extrasOpen = extrasOpen;
+  saveUiPrefs(prefs);
+}
+
+if (el.toggleExtras) {
+  el.toggleExtras.addEventListener("click", () => setExtrasOpen(!extrasOpen));
+}
+
+{
+  const prefs = loadUiPrefs();
+  const isMobile = window.matchMedia?.("(max-width: 760px)")?.matches;
+  const shouldOpen = typeof prefs.extrasOpen === "boolean" ? prefs.extrasOpen : !isMobile;
+  setExtrasOpen(shouldOpen);
+}
+
+let showAllOptions = false;
+function setShowAllOptions(showAll) {
+  showAllOptions = Boolean(showAll);
+  if (el.toggleAllOptions) el.toggleAllOptions.textContent = showAllOptions ? "Só vencedora" : "Mais opções";
+  const prefs = loadUiPrefs();
+  prefs.showAllOptions = showAllOptions;
+  saveUiPrefs(prefs);
+}
+
+if (el.toggleAllOptions) {
+  el.toggleAllOptions.addEventListener("click", () => {
+    setShowAllOptions(!showAllOptions);
+    requestGenerate({ immediate: true });
+  });
+}
+
+{
+  const prefs = loadUiPrefs();
+  const isMobile = window.matchMedia?.("(max-width: 760px)")?.matches;
+  const shouldShowAll = typeof prefs.showAllOptions === "boolean" ? prefs.showAllOptions : !isMobile;
+  setShowAllOptions(shouldShowAll);
+}
+
+function updatePlatformUI() {
+  const context = normalizeText(el.context?.value);
+  const isTinder = context === "apps";
+  if (el.platformTinder) el.platformTinder.classList.toggle("primary", isTinder);
+  if (el.platformInstagram) el.platformInstagram.classList.toggle("primary", !isTinder);
+}
+
+function setPlatform(platform) {
+  if (platform === "tinder") {
+    if (el.context) el.context.value = "apps";
+  } else {
+    if (el.context) el.context.value = "instagram";
+  }
+  if (el.goal) el.goal.value = "destravar";
+  updateContextUI();
+  updateGoalUI();
+  updatePlatformUI();
+  scheduleSave();
+  requestGenerate({ immediate: true });
+}
+
+if (el.platformTinder) {
+  el.platformTinder.addEventListener("click", () => setPlatform("tinder"));
+}
+if (el.platformInstagram) {
+  el.platformInstagram.addEventListener("click", () => setPlatform("instagram"));
 }
 
 function pickFirstNonEmptyLine(text) {
@@ -474,6 +593,7 @@ async function extractChatFromImage() {
     }
 
     scheduleSave();
+    scrollToResultsOnce = true;
     generate();
     setOcrStatus("Texto extraído. Dica: marque Eu:/Ela: na conversa pra melhorar a análise.");
   } catch {
@@ -498,6 +618,7 @@ async function extractProfileFromImage() {
     const current = normalizeText(el.profile.value);
     el.profile.value = current ? `${current}\n${text}` : text;
     scheduleSave();
+    scrollToResultsOnce = true;
     generate();
     setProfileOcrStatus("Texto extraído e colocado no gancho do perfil.");
   } catch {
@@ -1370,9 +1491,10 @@ function buildPrompt({ goal, context, style, spice, avoidSet, profile, igStory, 
   return [header, ...details, ...placeBit, ...whenBit, ...datePrefs].join("\n");
 }
 
-function setOptions(options) {
+function setOptions(options, { recommendedKey, showAll = true } = {}) {
   el.options.innerHTML = "";
-  for (const opt of options) {
+  const list = showAll || !recommendedKey ? options : options.filter((o) => o.key === recommendedKey);
+  for (const opt of list) {
     const wrap = document.createElement("div");
     wrap.className = opt.recommended ? "optionCard winner" : "optionCard";
     wrap.dataset.text = normalizeText(opt.text);
@@ -1409,15 +1531,8 @@ function setOptions(options) {
     shorten.className = "ghost";
     shorten.textContent = "Encurtar";
 
-    const whatsapp = document.createElement("button");
-    whatsapp.type = "button";
-    whatsapp.className = "ghost";
-    whatsapp.textContent = "WhatsApp";
-    whatsapp.addEventListener("click", () => openWhatsApp(wrap.dataset.text));
-
     actions.appendChild(copy);
     actions.appendChild(shorten);
-    actions.appendChild(whatsapp);
     header.appendChild(badge);
     header.appendChild(actions);
 
@@ -2072,12 +2187,27 @@ function updateHint({ goal, chat, lastHer }) {
   el.inputHint.textContent = parts.join(" ");
 }
 
+let generateTimer = null;
+function requestGenerate({ immediate = false } = {}) {
+  const isMobile = window.matchMedia?.("(max-width: 760px)")?.matches;
+  if (immediate || !isMobile) {
+    generate();
+    return;
+  }
+  if (generateTimer) window.clearTimeout(generateTimer);
+  generateTimer = window.setTimeout(() => {
+    generateTimer = null;
+    generate();
+  }, 550);
+}
+
 let scrollToResultsOnce = false;
 function generate() {
   updateContextUI();
   updateGoalUI();
   updatePrivacyUI();
   updateVariationsUI();
+  updatePlatformUI();
   const goal = el.goal.value;
   const context = el.context.value;
   const style = el.style.value;
@@ -2116,16 +2246,16 @@ function generate() {
     optionsWithWins.find((o) => o.key === diag.recommendedKeys?.[0]) ??
     optionsWithWins.find((o) => o.recommended) ??
     optionsWithWins[0];
-  setOptions(optionsWithWins);
+  setOptions(optionsWithWins, { recommendedKey: recommendedOption?.key, showAll: showAllOptions });
   if (el.winnerHint) {
-    el.winnerHint.textContent = recommendedOption ? `Vencedora: ${recommendedOption.key}.` : "";
+    el.winnerHint.textContent = recommendedOption ? `Recomendação: ${recommendedOption.key}.` : "";
   }
   if (el.copyWinner) {
     el.copyWinner.onclick = async () => {
       if (!recommendedOption) return;
       await copyText(recommendedOption.text);
       el.copyWinner.textContent = "Copiado";
-      setTimeout(() => (el.copyWinner.textContent = "Copiar vencedora"), 900);
+      setTimeout(() => (el.copyWinner.textContent = "Copiar resposta"), 900);
     };
   }
   if (el.openWinnerWhatsApp) {
@@ -2206,14 +2336,14 @@ function setVariationEnabled(enabled) {
   if (!variationsEnabled) variationIndex = 0;
   updateVariationsUI();
   scheduleSave();
-  generate();
+  requestGenerate({ immediate: true });
 }
 
 function setVariationIndex(idx) {
   variationIndex = Math.max(0, Math.min(3, Number(idx ?? 0)));
   updateVariationsUI();
   scheduleSave();
-  generate();
+  requestGenerate({ immediate: true });
 }
 
 if (el.enableVariations) {
@@ -2267,7 +2397,7 @@ if (el.openInviteWhatsApp) {
 
 function defaultState() {
   return {
-    goal: "conhecer",
+    goal: "destravar",
     context: "apps",
     style: "engracado",
     spice: "mid",
@@ -2398,7 +2528,7 @@ function clearState() {
     localStorage.removeItem(STORAGE_KEY);
   } catch {}
   applyState(defaultState());
-  generate();
+  requestGenerate({ immediate: true });
 }
 
 for (const input of [
@@ -2433,14 +2563,14 @@ for (const input of [
     if (input === el.goal) updateGoalUI();
     if (input === el.privacyMode) updatePrivacyUI();
     scheduleSave();
-    generate();
+    requestGenerate();
   });
   input.addEventListener("change", () => {
     if (input === el.context) updateContextUI();
     if (input === el.goal) updateGoalUI();
     if (input === el.privacyMode) updatePrivacyUI();
     scheduleSave();
-    generate();
+    requestGenerate({ immediate: true });
   });
 }
 
@@ -2477,6 +2607,7 @@ if (el.ocrPaste) {
     }
     el.chat.value = res.text;
     scheduleSave();
+    scrollToResultsOnce = true;
     generate();
     setOcrStatus("Texto colado no campo Conversa.");
   });
@@ -2514,6 +2645,7 @@ if (el.profileOcrPaste) {
     const current = normalizeText(el.profile.value);
     el.profile.value = current ? `${current}\n${res.text}` : res.text;
     scheduleSave();
+    scrollToResultsOnce = true;
     generate();
     setProfileOcrStatus("Texto colado no Gancho do perfil.");
   });
@@ -2744,6 +2876,8 @@ window.addEventListener("appinstalled", () => {
 });
 
 const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+const isIosInApp =
+  isIos && /(Instagram|FBAN|FBAV|FB_IAB|FBIOS|Line|WhatsApp|Twitter|Snapchat|TikTok)/i.test(navigator.userAgent);
 const isStandalone = window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone;
 const isSecure =
   window.isSecureContext ||
@@ -2754,6 +2888,10 @@ const isSecure =
 function updateInstallHints() {
   if (isStandalone) return;
   if (isIos) {
+    if (isIosInApp) {
+      setInstallStatus("No iPhone: abra este link no Safari (não no navegador do Instagram/WhatsApp). Lá o upload e “Adicionar à Tela de Início” funcionam melhor.");
+      return;
+    }
     if (!isSecure) {
       setInstallStatus("No iPhone: para instalar/usar offline, abra em HTTPS (ex.: GitHub Pages / Cloudflare Tunnel / LocalTunnel).");
       return;

@@ -4,10 +4,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0b1220" />
+    <meta name="application-name" content="XISTÃO MANAGER" />
+    <meta name="apple-mobile-web-app-title" content="XISTÃO" />
     <title>XISTÃO MANAGER</title>
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./icon.svg" />
+    <link rel="apple-touch-icon" href="./icon.svg" sizes="180x180" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="stylesheet" href="./styles.css" />
@@ -28,97 +30,18 @@
         <div id="privacyBar" class="privacyBar hidden">Modo privacidade ATIVO: o app não salva conversa automaticamente neste aparelho.</div>
 
         <section class="card">
-          <div class="cardTitle">Casos salvos</div>
-          <div class="grid">
-            <label class="field">
-              <span class="label">Nome do caso</span>
-              <input id="caseName" type="text" placeholder="Ex.: Ana - story do café" />
-            </label>
-            <label class="field">
-              <span class="label">Meus casos</span>
-              <select id="caseList"></select>
-            </label>
-          </div>
-          <div class="row right">
-            <div class="btnRow">
-              <button id="saveCase" class="ghost" type="button">Salvar</button>
-              <button id="loadCase" class="ghost" type="button">Carregar</button>
-              <button id="deleteCase" class="ghost" type="button">Excluir</button>
-              <button id="exportCases" class="ghost" type="button">Exportar</button>
-              <button id="importCases" class="ghost" type="button">Importar</button>
-              <button id="toggleCasesJson" class="ghost" type="button">Colar JSON</button>
-              <input id="importCasesFile" class="hidden" type="file" accept="application/json,.json" />
-            </div>
-          </div>
-          <div class="hint" id="caseStatus"></div>
-          <div class="field hidden" id="casesJsonBox">
-            <span class="label">Importar/exportar via JSON</span>
-            <textarea id="casesJson" rows="6" placeholder="Cole aqui o JSON de casos (ou clique em Copiar JSON)."></textarea>
-            <div class="btnRow">
-              <button id="copyCasesJson" class="ghost" type="button">Copiar JSON</button>
-              <button id="importCasesJson" class="ghost" type="button">Importar JSON</button>
-              <button id="closeCasesJson" class="ghost" type="button">Fechar</button>
-            </div>
-          </div>
-        </section>
-
-        <section class="card">
           <div class="cardTitle">Entrada</div>
 
-          <div class="grid">
-            <label class="field">
-              <span class="label">Objetivo</span>
-              <select id="goal">
-                <option value="conhecer">Conhecer pessoas</option>
-                <option value="destravar">Destravar conversa</option>
-                <option value="encontro">Marcar encontro</option>
-                <option value="reengajar">Reengajar após sumiço</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span class="label">Contexto</span>
-              <select id="context">
-                <option value="apps">Apps</option>
-                <option value="instagram">Instagram</option>
-                <option value="whatsapp">WhatsApp/DM</option>
-                <option value="aoVivo">Ao vivo</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span class="label">Seu estilo</span>
-              <select id="style">
-                <option value="engracado">Engraçado</option>
-                <option value="direto">Direto</option>
-                <option value="romantico">Romântico</option>
-                <option value="sutil">Sutil</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span class="label">Ousadia</span>
-              <select id="spice">
-                <option value="low">Leve</option>
-                <option value="mid" selected>Médio</option>
-                <option value="high">Ousado</option>
-              </select>
-            </label>
-          </div>
-
-          <div class="field">
-            <span class="label">Evitar (pode marcar mais de um)</span>
-            <div class="checks" id="avoidChecks">
-              <label class="check"><input id="avoidFrio" type="checkbox" value="frio" checked /> <span>Parecer frio</span></label>
-              <label class="check"><input id="avoidCarente" type="checkbox" value="carente" checked /> <span>Parecer carente</span></label>
-              <label class="check"><input id="avoidInvasivo" type="checkbox" value="invasivo" /> <span>Ser invasivo</span></label>
-              <label class="check"><input id="avoidCringe" type="checkbox" value="cringe" /> <span>Tom cringe</span></label>
+          <div class="row">
+            <div class="btnRow">
+              <button id="platformTinder" class="ghost" type="button">Tinder</button>
+              <button id="platformInstagram" class="ghost" type="button">Instagram</button>
             </div>
           </div>
 
           <label class="field">
             <span class="label">Print da conversa (recomendado)</span>
-            <input id="chatImage" type="file" accept="image/*" capture="environment" />
+            <input id="chatImage" type="file" accept="image/*" />
             <div class="row">
               <div class="ocrStatus" id="ocrStatus"></div>
               <div class="btnRow">
@@ -131,7 +54,7 @@
 
           <label class="field">
             <span class="label">Print do perfil dela (recomendado)</span>
-            <input id="profileImage" type="file" accept="image/*" capture="environment" />
+            <input id="profileImage" type="file" accept="image/*" />
             <div class="row">
               <div class="ocrStatus" id="profileOcrStatus"></div>
               <div class="btnRow">
@@ -143,71 +66,132 @@
           </label>
 
           <label class="field">
-            <span class="label">Gancho do perfil dela (bio + detalhes das fotos)</span>
-            <textarea id="profile" rows="3" placeholder="Ex.: Bio: ‘café e trilha’. Foto: praia, livro, cachorro…" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
-          </label>
-
-          <label class="field hidden" id="igStoryField">
-            <span class="label">Instagram: story/assunto que você vai responder (opcional)</span>
-            <textarea id="igStory" rows="3" placeholder="Ex.: Foto do café / show ontem / viagem / treino / texto do story…" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
-          </label>
-
-          <label class="field">
-            <span class="label">Última mensagem dela (opcional, pra gerar mais rápido)</span>
-            <textarea id="lastHer" rows="2" placeholder="Ex.: ‘kkkk gostei’ ou ‘e você, mora onde?’" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
-          </label>
-
-          <label class="field hidden" id="noReplyField">
-            <span class="label">Tempo sem resposta (pra reengajar melhor)</span>
-            <select id="noReply">
-              <option value="hours">Algumas horas</option>
-              <option value="1d">1 dia</option>
-              <option value="3d">2–3 dias</option>
-              <option value="1w">1 semana+</option>
-            </select>
-          </label>
-
-          <div class="grid">
-            <label class="field">
-              <span class="label">Meu nome no chat (opcional)</span>
-              <input id="meName" type="text" placeholder="Ex.: Você / João" />
-            </label>
-            <label class="field">
-              <span class="label">Nome dela no chat (opcional)</span>
-              <input id="herName" type="text" placeholder="Ex.: Ana" />
-            </label>
-          </div>
-
-          <label class="field">
-            <span class="label">Conversa (cole as últimas mensagens)</span>
+            <span class="label">Perfil dela (pra iniciar a interação)</span>
             <textarea
-              id="chat"
-              rows="8"
+              id="profile"
+              rows="3"
+              placeholder="Cole a bio e detalhes relevantes. Ex.: ‘café + trilha’, ‘médica’, ‘ama dogs’, ‘viaja muito’…"
               autocapitalize="off"
               autocorrect="off"
               spellcheck="false"
-              placeholder="Dica: comece as linhas com “Eu:” e “Ela:”
-Ex.:
-Eu: Oi, achei teu perfil massa
-Ela: kkk valeu"
             ></textarea>
           </label>
 
-          <div class="row">
-            <label class="check inline"><input id="privacyMode" type="checkbox" /> <span>Modo privacidade (não salvar conversa automaticamente)</span></label>
-            <div class="btnRow">
-              <button id="clearSensitive" class="ghost" type="button">Limpar sensíveis</button>
-            </div>
-          </div>
+          <div id="detailsFields" class="detailsFields hidden">
+            <div class="grid">
+              <label class="field">
+                <span class="label">Objetivo</span>
+                <select id="goal">
+                  <option value="conhecer">Conhecer pessoas</option>
+                  <option value="destravar">Destravar conversa</option>
+                  <option value="encontro">Marcar encontro</option>
+                  <option value="reengajar">Reengajar após sumiço</option>
+                </select>
+              </label>
 
-          <div class="row">
+              <label class="field">
+                <span class="label">Contexto</span>
+                <select id="context">
+                  <option value="apps">Apps</option>
+                  <option value="instagram">Instagram</option>
+                  <option value="whatsapp">WhatsApp/DM</option>
+                  <option value="aoVivo">Ao vivo</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span class="label">Seu estilo</span>
+                <select id="style">
+                  <option value="engracado">Engraçado</option>
+                  <option value="direto">Direto</option>
+                  <option value="romantico">Romântico</option>
+                  <option value="sutil">Sutil</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span class="label">Ousadia</span>
+                <select id="spice">
+                  <option value="low">Leve</option>
+                  <option value="mid" selected>Médio</option>
+                  <option value="high">Ousado</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="field">
+              <span class="label">Evitar (pode marcar mais de um)</span>
+              <div class="checks" id="avoidChecks">
+                <label class="check"><input id="avoidFrio" type="checkbox" value="frio" checked /> <span>Parecer frio</span></label>
+                <label class="check"><input id="avoidCarente" type="checkbox" value="carente" checked /> <span>Parecer carente</span></label>
+                <label class="check"><input id="avoidInvasivo" type="checkbox" value="invasivo" /> <span>Ser invasivo</span></label>
+                <label class="check"><input id="avoidCringe" type="checkbox" value="cringe" /> <span>Tom cringe</span></label>
+              </div>
+            </div>
+
+            <label class="field hidden" id="igStoryField">
+              <span class="label">Instagram: story/assunto que você vai responder (opcional)</span>
+              <textarea id="igStory" rows="3" placeholder="Ex.: Foto do café / show ontem / viagem / treino / texto do story…" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
+            </label>
+
+            <label class="field">
+              <span class="label">Última mensagem dela (opcional, pra gerar mais rápido)</span>
+              <textarea id="lastHer" rows="2" placeholder="Ex.: ‘kkkk gostei’ ou ‘e você, mora onde?’" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
+            </label>
+
+            <label class="field hidden" id="noReplyField">
+              <span class="label">Tempo sem resposta (pra reengajar melhor)</span>
+              <select id="noReply">
+                <option value="hours">Algumas horas</option>
+                <option value="1d">1 dia</option>
+                <option value="3d">2–3 dias</option>
+                <option value="1w">1 semana+</option>
+              </select>
+            </label>
+
+            <div class="grid">
+              <label class="field">
+                <span class="label">Meu nome no chat (opcional)</span>
+                <input id="meName" type="text" placeholder="Ex.: Você / João" />
+              </label>
+              <label class="field">
+                <span class="label">Nome dela no chat (opcional)</span>
+                <input id="herName" type="text" placeholder="Ex.: Ana" />
+              </label>
+            </div>
+
+            <label class="field">
+              <span class="label">Conversa (cole as últimas mensagens)</span>
+              <textarea
+                id="chat"
+                rows="8"
+                autocapitalize="off"
+                autocorrect="off"
+                spellcheck="false"
+                placeholder="Dica: comece as linhas com “Eu:” e “Ela:”
+Ex.:
+Eu: Oi, achei teu perfil massa
+Ela: kkk valeu"
+              ></textarea>
+            </label>
+
+            <div class="row">
+              <label class="check inline"><input id="privacyMode" type="checkbox" /> <span>Modo privacidade (não salvar conversa automaticamente)</span></label>
+              <div class="btnRow">
+                <button id="clearSensitive" class="ghost" type="button">Limpar sensíveis</button>
+              </div>
+            </div>
+
             <label class="field small">
               <span class="label">Cidade/Bairro (opcional)</span>
               <input id="place" type="text" placeholder="Ex.: Moema, SP" />
             </label>
+          </div>
+
+          <div class="row right">
             <div class="btnRow">
               <button id="reset" class="ghost" type="button">Limpar</button>
-              <button id="generate" class="primary" type="button">Gerar opções</button>
+              <button id="generate" class="primary" type="button">Gerar resposta</button>
             </div>
           </div>
 
@@ -215,29 +199,18 @@ Ela: kkk valeu"
         </section>
 
         <section class="card">
-          <div class="cardTitle">Próxima mensagem (A/B/C)</div>
+          <div class="cardTitle">Resposta pronta</div>
           <div class="row">
             <div class="hint" id="winnerHint"></div>
             <div class="btnRow">
-              <button id="copyWinner" class="ghost" type="button">Copiar vencedora</button>
-              <button id="openWinnerWhatsApp" class="ghost" type="button">WhatsApp vencedora</button>
-            </div>
-          </div>
-          <div class="row right">
-            <div class="btnRow">
-              <button id="enableVariations" class="ghost" type="button">Gerar +3 variações</button>
-              <div id="variationsBar" class="btnRow hidden">
-                <button id="var1" class="ghost" type="button">V1</button>
-                <button id="var2" class="ghost" type="button">V2</button>
-                <button id="var3" class="ghost" type="button">V3</button>
-                <button id="var4" class="ghost" type="button">V4</button>
-              </div>
+              <button id="copyWinner" class="ghost" type="button">Copiar resposta</button>
+              <button id="toggleAllOptions" class="ghost" type="button">Mais opções</button>
             </div>
           </div>
           <div class="options" id="options"></div>
         </section>
 
-        <section class="card">
+        <section class="card extraCard">
           <div class="cardTitle">Diagnóstico e estratégia</div>
           <div class="diagGrid">
             <div class="diagItem">
@@ -270,7 +243,7 @@ Ela: kkk valeu"
           </div>
         </section>
 
-        <section class="card">
+        <section class="card extraCard">
           <div class="cardTitle">Prompt pronto pra IA (copiar e colar no app)</div>
           <div class="promptBox">
             <textarea id="prompt" rows="10" readonly></textarea>
@@ -280,7 +253,7 @@ Ela: kkk valeu"
           </div>
         </section>
 
-        <section class="card">
+        <section class="card extraCard">
           <div class="cardTitle">Lugar e convite (pra fechar encontro)</div>
           <div class="grid">
             <label class="field">
@@ -345,9 +318,44 @@ Ela: kkk valeu"
           </div>
         </section>
 
-        <section class="card">
+        <section class="card extraCard">
           <div class="cardTitle">Roteiro (o que fazer depois)</div>
           <ol class="steps" id="steps"></ol>
+        </section>
+
+        <section class="card">
+          <div class="cardTitle">Casos salvos</div>
+          <div class="grid">
+            <label class="field">
+              <span class="label">Nome do caso</span>
+              <input id="caseName" type="text" placeholder="Ex.: Ana - story do café" />
+            </label>
+            <label class="field">
+              <span class="label">Meus casos</span>
+              <select id="caseList"></select>
+            </label>
+          </div>
+          <div class="row right">
+            <div class="btnRow">
+              <button id="saveCase" class="ghost" type="button">Salvar</button>
+              <button id="loadCase" class="ghost" type="button">Carregar</button>
+              <button id="deleteCase" class="ghost" type="button">Excluir</button>
+              <button id="exportCases" class="ghost" type="button">Exportar</button>
+              <button id="importCases" class="ghost" type="button">Importar</button>
+              <button id="toggleCasesJson" class="ghost" type="button">Colar JSON</button>
+              <input id="importCasesFile" class="hidden" type="file" accept="application/json,.json" />
+            </div>
+          </div>
+          <div class="hint" id="caseStatus"></div>
+          <div class="field hidden" id="casesJsonBox">
+            <span class="label">Importar/exportar via JSON</span>
+            <textarea id="casesJson" rows="6" placeholder="Cole aqui o JSON de casos (ou clique em Copiar JSON)."></textarea>
+            <div class="btnRow">
+              <button id="copyCasesJson" class="ghost" type="button">Copiar JSON</button>
+              <button id="importCasesJson" class="ghost" type="button">Importar JSON</button>
+              <button id="closeCasesJson" class="ghost" type="button">Fechar</button>
+            </div>
+          </div>
         </section>
       </main>
 
@@ -355,6 +363,8 @@ Ela: kkk valeu"
         <div class="row right">
           <div class="btnRow">
             <button id="checkUpdate" class="ghost" type="button">Atualizar app</button>
+            <button id="toggleDetails" class="ghost" type="button">Ajustes</button>
+            <button id="toggleExtras" class="ghost" type="button">Extras</button>
           </div>
         </div>
         <div id="installStatus" class="installStatus"></div>
