@@ -2202,6 +2202,7 @@ function requestGenerate({ immediate = false } = {}) {
 }
 
 let scrollToResultsOnce = false;
+let manualGenerate = false;
 function generate() {
   updateContextUI();
   updateGoalUI();
@@ -2294,8 +2295,14 @@ function generate() {
     scrollToResultsOnce = false;
     const target = el.winnerHint || el.options;
     if (target?.scrollIntoView) {
-      setTimeout(() => target.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+      const isIosUA = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      setTimeout(() => target.scrollIntoView({ behavior: isIosUA ? "auto" : "smooth", block: "start" }), 0);
     }
+  }
+
+  if (manualGenerate) {
+    manualGenerate = false;
+    setUserStatus(recommendedOption ? "Pronto. Veja a resposta em “Resposta pronta”." : "Não consegui gerar resposta.");
   }
 
   el.copyPlan.onclick = async () => {
@@ -2328,7 +2335,30 @@ function generate() {
 
 el.generate.addEventListener("click", () => {
   scrollToResultsOnce = true;
-  generate();
+  manualGenerate = true;
+  const previous = el.generate.textContent;
+  el.generate.textContent = "Gerando…";
+  try {
+    setUserStatus("Gerando…");
+    const hasChatText = Boolean(normalizeText(el.chat?.value));
+    const hasIgStory = Boolean(normalizeText(el.igStory?.value));
+    const hasProfile = Boolean(normalizeText(el.profile?.value));
+    const hasChatImage = Boolean(el.chatImage?.files?.[0]);
+
+    if (!hasChatText && !hasIgStory && !hasProfile && hasChatImage && !("TextDetector" in window)) {
+      setOcrStatus("No iPhone: toque e segure no texto do print (Live Text), copie e use “Colar texto”.");
+    }
+    generate();
+    if (el.options?.children?.length === 0) {
+      setUserStatus("Não consegui gerar opções: tente “Colar texto” ou abra Ajustes e cole a conversa.");
+    }
+  } catch {
+    setUserStatus("Erro ao gerar. Recarregue a página e tente de novo.");
+  } finally {
+    window.setTimeout(() => {
+      el.generate.textContent = previous;
+    }, 400);
+  }
 });
 
 function setVariationEnabled(enabled) {
@@ -2588,9 +2618,15 @@ if (el.chatImage) {
     setOcrStatus(
       canOcr
         ? `Imagem selecionada: ${file.name}`
-        : `Imagem selecionada: ${file.name}. No iPhone, toque e segure no texto do print (Live Text) e cole em “Conversa”.`
+        : `Imagem selecionada: ${file.name}. No iPhone, toque e segure no texto do print (Live Text) e use “Colar texto”.`
     );
-    if (canOcr) extractChatFromImage();
+    if (canOcr) {
+      extractChatFromImage();
+      return;
+    }
+    setUserStatus("Print ok. No iPhone: toque e segure no preview, copie o texto e use “Colar texto”.");
+    scrollToResultsOnce = true;
+    generate();
   });
 }
 
@@ -2625,9 +2661,15 @@ if (el.profileImage) {
     setProfileOcrStatus(
       canOcr
         ? `Imagem selecionada: ${file.name}`
-        : `Imagem selecionada: ${file.name}. No iPhone, toque e segure no texto do print (Live Text) e cole em “Gancho do perfil dela”.`
+        : `Imagem selecionada: ${file.name}. No iPhone, toque e segure no texto do print (Live Text) e use “Colar texto”.`
     );
-    if (canOcr) extractProfileFromImage();
+    if (canOcr) {
+      extractProfileFromImage();
+      return;
+    }
+    setUserStatus("Perfil ok. No iPhone: toque e segure no preview, copie o texto e use “Colar texto”.");
+    scrollToResultsOnce = true;
+    generate();
   });
 }
 
@@ -2863,16 +2905,30 @@ function setInstallStatus(text) {
   el.installStatus.textContent = text;
 }
 
+function setUserStatus(text) {
+  const t = String(text ?? "").trim();
+  if (el.inputHint) el.inputHint.textContent = t;
+  setInstallStatus(t);
+}
+
 let deferredInstallPrompt = null;
 window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault();
   deferredInstallPrompt = e;
-  setInstallStatus("Dica: no Android, você pode “Adicionar à tela inicial” pelo menu do navegador.");
+  setUserStatus("Dica: no Android, você pode “Adicionar à tela inicial” pelo menu do navegador.");
 });
 
 window.addEventListener("appinstalled", () => {
   deferredInstallPrompt = null;
-  setInstallStatus("Instalado. Agora você pode usar como app na tela inicial.");
+  setUserStatus("Instalado. Agora você pode usar como app na tela inicial.");
+});
+
+window.addEventListener("error", () => {
+  setUserStatus("Erro no app. Recarregue a página (Safari) e tente de novo.");
+});
+
+window.addEventListener("unhandledrejection", () => {
+  setUserStatus("Erro no app. Recarregue a página (Safari) e tente de novo.");
 });
 
 const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -2884,6 +2940,9 @@ const isSecure =
   window.location.protocol === "https:" ||
   window.location.hostname === "localhost" ||
   window.location.hostname === "127.0.0.1";
+
+const APP_VERSION = "38";
+const SW_URL = `./service-worker.js?v=${APP_VERSION}`;
 
 function updateInstallHints() {
   if (isStandalone) return;
@@ -2912,7 +2971,7 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     if (!isSecure) return;
     try {
-      await navigator.serviceWorker.register("./service-worker.js");
+      await navigator.serviceWorker.register(SW_URL, { updateViaCache: "none" });
     } catch {
       updateInstallHints();
     }
@@ -2927,36 +2986,59 @@ if ("serviceWorker" in navigator) {
 
 async function checkForAppUpdate() {
   if (!("serviceWorker" in navigator)) {
-    setInstallStatus("Sem service worker. Recarregando…");
+    setUserStatus("Sem service worker. Recarregando…");
     window.location.reload();
     return;
   }
   try {
-    setInstallStatus("Verificando atualização…");
-    const reg = await navigator.serviceWorker.getRegistration();
-    if (!reg) {
-      setInstallStatus("Sem registro de service worker. Recarregando…");
-      window.location.reload();
-      return;
+    setUserStatus("Atualizando…");
+
+    const regs0 = await navigator.serviceWorker.getRegistrations();
+    if (!regs0.length) {
+      try {
+        await navigator.serviceWorker.register(SW_URL, { updateViaCache: "none" });
+      } catch {}
     }
-    await reg.update();
-    if (reg.waiting) {
-      reg.waiting.postMessage({ type: "SKIP_WAITING" });
-      setInstallStatus("Atualizando app…");
-      return;
+
+    const reg =
+      (await navigator.serviceWorker.getRegistration()) || (await navigator.serviceWorker.getRegistrations())[0] || null;
+
+    if (reg) {
+      await reg.update();
+      if (reg.waiting) {
+        reg.waiting.postMessage({ type: "SKIP_WAITING" });
+        setUserStatus("Aplicando atualização…");
+        return;
+      }
+      if (reg.installing) {
+        setUserStatus("Baixando atualização…");
+        reg.installing.addEventListener("statechange", () => {
+          if (reg.installing && reg.installing.state === "installed") {
+            if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
+            setUserStatus("Aplicando atualização…");
+          }
+        });
+        return;
+      }
     }
-    if (reg.installing) {
-      reg.installing.addEventListener("statechange", () => {
-        if (reg.installing && reg.installing.state === "installed") {
-          if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
-          setInstallStatus("Atualizando app…");
-        }
-      });
-      return;
+
+    setUserStatus("Forçando atualização…");
+    const regs = await navigator.serviceWorker.getRegistrations().catch(() => []);
+    await Promise.all(regs.map((r) => r.unregister().catch(() => false)));
+    if ("caches" in window) {
+      const keys = await caches.keys().catch(() => []);
+      await Promise.all(keys.map((k) => caches.delete(k).catch(() => false)));
     }
-    setInstallStatus("Nenhuma atualização encontrada.");
+    window.location.reload();
   } catch {
-    setInstallStatus("Falha ao verificar atualização.");
+    setUserStatus("Forçando atualização…");
+    const regs = await navigator.serviceWorker.getRegistrations().catch(() => []);
+    await Promise.all(regs.map((r) => r.unregister().catch(() => false)));
+    if ("caches" in window) {
+      const keys = await caches.keys().catch(() => []);
+      await Promise.all(keys.map((k) => caches.delete(k).catch(() => false)));
+    }
+    window.location.reload();
   }
 }
 
