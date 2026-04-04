@@ -211,6 +211,11 @@ input, textarea, select {
   line-height: 1.35;
 }
 
+#winnerHint,
+#inputHint {
+  white-space: pre-wrap;
+}
+
 .ocrStatus {
   color: var(--muted);
   font-size: 13px;
@@ -224,6 +229,12 @@ input, textarea, select {
   border: 1px solid var(--border);
   border-radius: var(--radiusSm);
   background: rgba(0, 0, 0, 0.12);
+  margin-top: 10px;
+}
+
+.detailsFields {
+  display: grid;
+  gap: 14px;
   margin-top: 10px;
 }
 

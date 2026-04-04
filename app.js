@@ -546,6 +546,64 @@ async function ocrUsingTextDetector(file) {
   }
 }
 
+let tesseractLoadPromise = null;
+function loadScriptOnce(url, marker) {
+  const existing = document.querySelector(`script[data-loader=\"${marker}\"]`);
+  if (existing) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = url;
+    s.async = true;
+    s.defer = true;
+    s.dataset.loader = marker;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("Falha ao carregar OCR."));
+    document.head.appendChild(s);
+  });
+}
+
+async function ensureTesseract() {
+  if (window.Tesseract?.recognize) return window.Tesseract;
+  if (!tesseractLoadPromise) {
+    tesseractLoadPromise = loadScriptOnce("https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js", "tesseract");
+  }
+  await tesseractLoadPromise;
+  return window.Tesseract?.recognize ? window.Tesseract : null;
+}
+
+async function ocrUsingTesseract(file, setStatusFn) {
+  const Tesseract = await ensureTesseract();
+  if (!Tesseract) return null;
+  const { source, cleanup } = await fileToImageSource(file);
+  try {
+    const resPor = await Tesseract.recognize(source, "por", {
+      logger: (m) => {
+        const p = Number(m?.progress ?? 0);
+        if (m?.status && Number.isFinite(p)) {
+          const pct = Math.round(p * 100);
+          setStatusFn?.(`${m.status}… ${pct}%`);
+        }
+      },
+    }).catch(() => null);
+    const textPor = normalizeText(resPor?.data?.text);
+    if (textPor) return textPor;
+
+    const resEng = await Tesseract.recognize(source, "eng", {
+      logger: (m) => {
+        const p = Number(m?.progress ?? 0);
+        if (m?.status && Number.isFinite(p)) {
+          const pct = Math.round(p * 100);
+          setStatusFn?.(`${m.status}… ${pct}%`);
+        }
+      },
+    }).catch(() => null);
+    const textEng = normalizeText(resEng?.data?.text);
+    return textEng || null;
+  } finally {
+    cleanup?.();
+  }
+}
+
 const previewUrls = {
   chat: "",
   profile: "",
@@ -575,9 +633,11 @@ async function extractChatFromImage() {
 
   setOcrStatus("Extraindo texto…");
   try {
-    const text = await ocrUsingTextDetector(file);
+    const text = (await ocrUsingTextDetector(file)) || (await ocrUsingTesseract(file, setOcrStatus));
     if (!text) {
-      setOcrStatus("OCR não suportado aqui. No iPhone, toque e segure no texto do print (Live Text) e cole em “Conversa”.");
+      setOcrStatus("Não consegui extrair o texto deste print. Se possível, cole a conversa manualmente.");
+      setUserStatus("OCR falhou. Abra Ajustes e cole a conversa no campo “Conversa”.");
+      setDetailsOpen(true);
       return;
     }
     el.chat.value = text;
@@ -597,7 +657,7 @@ async function extractChatFromImage() {
     generate();
     setOcrStatus("Texto extraído. Dica: marque Eu:/Ela: na conversa pra melhorar a análise.");
   } catch {
-    setOcrStatus("Não consegui extrair. Tente outra imagem ou use copiar/colar do Lens.");
+    setOcrStatus("Não consegui extrair. Tente um print mais nítido ou cole o texto manualmente.");
   }
 }
 
@@ -610,9 +670,11 @@ async function extractProfileFromImage() {
 
   setProfileOcrStatus("Extraindo texto…");
   try {
-    const text = await ocrUsingTextDetector(file);
+    const text = (await ocrUsingTextDetector(file)) || (await ocrUsingTesseract(file, setProfileOcrStatus));
     if (!text) {
-      setProfileOcrStatus("OCR não suportado aqui. No iPhone, toque e segure no texto do print (Live Text) e cole em “Gancho do perfil dela”.");
+      setProfileOcrStatus("Não consegui extrair o texto deste print. Se possível, cole a bio manualmente.");
+      setUserStatus("OCR falhou. Cole o texto do perfil no campo “Perfil dela”.");
+      setDetailsOpen(true);
       return;
     }
     const current = normalizeText(el.profile.value);
@@ -622,7 +684,7 @@ async function extractProfileFromImage() {
     generate();
     setProfileOcrStatus("Texto extraído e colocado no gancho do perfil.");
   } catch {
-    setProfileOcrStatus("Não consegui extrair. Tente outra imagem ou use copiar/colar do Live Text.");
+    setProfileOcrStatus("Não consegui extrair. Tente um print mais nítido ou cole o texto manualmente.");
   }
 }
 
@@ -921,6 +983,118 @@ function diagnoseInteraction({ goal, context, style, spice, avoidSet, hook, chat
     recommendedKeys,
     recommendationText,
   };
+}
+
+function detectInputMode({ chatText, lastHerText, igStory, chatImageFile, profileText, profileImageFile }) {
+  const hasChat = Boolean(normalizeText(chatText) || normalizeText(lastHerText) || normalizeText(igStory) || chatImageFile);
+  const hasProfile = Boolean(normalizeText(profileText) || profileImageFile);
+  if (hasChat) return "CONTINUAÇÃO";
+  if (hasProfile) return "ABORDAGEM";
+  return "NONE";
+}
+
+function interestLine({ diag, chat }) {
+  const lastHer = normalizeText(chat?.lastHer);
+  if (!lastHer) return "baixo — sem mensagem dela ainda; trate como frio e puxe algo simples e fácil de responder.";
+  if (diag.interest === "high") return "alto — ela está respondendo com abertura (energia/pergunta/risada/validação).";
+  if (diag.interest === "mid") return "médio — tem abertura, mas ainda pode estar neutra; seja específico e puxe pro concreto.";
+  return "baixo — energia baixa/curta; reduz investimento e evita entrevista.";
+}
+
+function userErrorLine(chat) {
+  if (!chat?.totalTurns) return "Você não colou a conversa em texto ainda. Sem isso, eu só consigo chutar por cima.";
+  if (chat.lastSpeaker === "me") {
+    const lastMe = normalizeText(chat.lastMe);
+    const warnings = assessMessage(lastMe);
+    if (warnings.includes("Cobrança") || warnings.includes("“Sumiu?”"))
+      return "Você corre risco de soar cobrando. Reengaja curto e leve, sem cobrança.";
+    if (warnings.includes("Textão") || warnings.includes("Um pouco longo")) return "Você alongou demais. Encorta e deixa 1 gancho.";
+    if (warnings.includes("Muitas perguntas") || warnings.includes("Duas perguntas")) return "Você fez perguntas demais. Faz só 1 pergunta curta.";
+    return "Você mandou por último. Evita mandar sequência/justificar; reengaja curto ou espera.";
+  }
+  return "Nada grave. Só evita elogio genérico e não vira entrevista.";
+}
+
+function profileReadLine(profile) {
+  const p = normalizeText(profile);
+  if (!p) return "Perfil sem texto suficiente. Melhor puxar por um detalhe específico e ser curto.";
+  const tags = [];
+  if (/(café|cafe)/i.test(p)) tags.push("café");
+  if (/(viagem|viajar|trip|travel)/i.test(p)) tags.push("viagem");
+  if (/(treino|academia|fitness|corrid)/i.test(p)) tags.push("treino");
+  if (/(praia|mar)/i.test(p)) tags.push("praia");
+  if (/(música|musica|show|festival)/i.test(p)) tags.push("música");
+  if (/(livro|ler|leitura)/i.test(p)) tags.push("leitura");
+  if (/(vinho|drink|bar)/i.test(p)) tags.push("drink");
+  if (/(dog|cachorr|pet|gato)/i.test(p)) tags.push("pet");
+  const hook = extractHook(p);
+  const vibe = tags.length ? `Vibe: ${tags.slice(0, 4).join(", ")}.` : "Vibe: alguns ganchos.";
+  const hookBit = hook ? ` Gancho: ${hook}.` : "";
+  return `${vibe}${hookBit}`.trim();
+}
+
+function approachStrategyLine({ style, spice, avoidSet }) {
+  const parts = [];
+  parts.push("1 gancho específico + 1 pergunta curta.");
+  parts.push("Leveza + confiança + provocação sutil.");
+  if (avoidSet.has("carente")) parts.push("Sem validação/sem pedir atenção.");
+  if (avoidSet.has("cringe")) parts.push("Sem cantada pronta/sem clichê.");
+  if (spice === "high") parts.push("Intenção mais clara, sem pressão.");
+  if (spice === "low") parts.push("Flerte discreto.");
+  parts.push(`Tom: ${styleTone(style)}.`);
+  return parts.join(" ");
+}
+
+function buildContinuacaoReport({ chat, diag, recommendedOption, variations }) {
+  const lastBit = normalizeText(chat.lastHer)
+    ? `Última dela: “${clamp(chat.lastHer, 110)}”`
+    : normalizeText(chat.lastMe)
+      ? `Última sua: “${clamp(chat.lastMe, 110)}”`
+      : "Sem conversa em texto.";
+
+  const best = recommendedOption ? recommendedOption.text : "";
+  const vars = variations.filter(Boolean);
+
+  return [
+    "LEITURA RÁPIDA",
+    `${stageLabel(diag.stage)} • ${lastBit}`,
+    "",
+    "NÍVEL DE INTERESSE DELA",
+    interestLine({ diag, chat }),
+    "",
+    "ERRO DO USUÁRIO (se houver)",
+    userErrorLine(chat),
+    "",
+    "MELHOR RESPOSTA PARA ENVIAR",
+    best || "(vazio)",
+    "",
+    "VARIAÇÕES (máx 2)",
+    vars[0] ? vars[0] : "(vazio)",
+    vars[1] ? `\n${vars[1]}` : "",
+  ]
+    .join("\n")
+    .trim();
+}
+
+function buildAbordagemReport({ profile, style, spice, avoidSet, recommendedOption, variations }) {
+  const best = recommendedOption ? recommendedOption.text : "";
+  const vars = variations.filter(Boolean);
+  return [
+    "LEITURA DO PERFIL",
+    profileReadLine(profile),
+    "",
+    "ESTRATÉGIA",
+    approachStrategyLine({ style, spice, avoidSet }),
+    "",
+    "ABORDAGEM IDEAL",
+    best || "(vazio)",
+    "",
+    "VARIAÇÕES (máx 2)",
+    vars[0] ? vars[0] : "(vazio)",
+    vars[1] ? `\n${vars[1]}` : "",
+  ]
+    .join("\n")
+    .trim();
 }
 
 function styleTone(style) {
@@ -1409,18 +1583,8 @@ function buildSteps({ goal, context }) {
 }
 
 function buildPrompt({ goal, context, style, spice, avoidSet, profile, igStory, lastHer, chat, noReply, place, dateType, budget, dateWhen, dateTime }) {
-  const goalText =
-    goal === "encontro"
-      ? "marcar um encontro simples e próximo"
-      : goal === "destravar"
-        ? "destravar a conversa e aumentar interesse"
-        : goal === "reengajar"
-          ? "reengajar com leveza sem cobrar"
-          : "conhecer e criar conexão rápida";
-
   const contextText =
-    context === "apps" ? "apps de namoro" : context === "instagram" ? "Instagram (DM/stories)" : context === "whatsapp" ? "WhatsApp/DM" : "ao vivo";
-
+    context === "apps" ? "Tinder/apps" : context === "instagram" ? "Instagram (DM/story)" : context === "whatsapp" ? "WhatsApp/DM" : "ao vivo";
   const noReplyText =
     normalizeText(noReply) === "hours"
       ? "algumas horas"
@@ -1431,64 +1595,86 @@ function buildPrompt({ goal, context, style, spice, avoidSet, profile, igStory, 
           : normalizeText(noReply) === "1w"
             ? "1 semana+"
             : "";
+  const whenText = formatWhen({ when: dateWhen, time: dateTime });
 
   const header = [
-    "Você é um especialista em comportamento humano, atração, comunicação social e dinâmica de relacionamentos.",
-    "Sua função não é apenas sugerir frases, mas desenvolver estratégias inteligentes, naturais e adaptáveis para interações com mulheres, focando em atração genuína, conexão emocional e posicionamento de valor.",
+    "Você é um especialista em comunicação, atração e dinâmica social aplicada a interações entre homens e mulheres em aplicativos como Instagram e Tinder.",
+    "Sua função é analisar a entrada do usuário (prints de conversa / perfil) e gerar respostas ou abordagens altamente eficazes.",
     "",
-    "Princípios obrigatórios:",
-    "1) Evite respostas genéricas, clichês ou artificiais.",
-    "2) Sempre analise o contexto antes de sugerir qualquer resposta.",
-    "3) Priorize autenticidade, leveza e inteligência social acima de técnicas prontas.",
-    "4) Identifique sinais de interesse/desinteresse/neutralidade e adapte a estratégia.",
-    "5) Trabalhe com progressão: abertura → conexão → tensão leve → convite.",
-    "6) Use humor, provocação leve e curiosidade como ferramentas principais.",
-    "7) Nunca sugira comportamentos carentes/insistentes que diminuam o valor do usuário.",
-    "8) Ensine o raciocínio por trás das sugestões.",
+    "IDENTIFICAÇÃO AUTOMÁTICA",
+    "Antes de responder, identifique o tipo de entrada:",
+    "Se for conversa → modo = CONTINUAÇÃO",
+    "Se for perfil → modo = ABORDAGEM",
     "",
-    `Objetivo: ${goalText}.`,
+    "OBJETIVO PRINCIPAL",
+    "Gerar mensagens naturais, atraentes e eficazes que:",
+    "- aumentem o interesse da mulher",
+    "- evitem comportamento carente",
+    "- conduzam para avanço (conversa ou encontro)",
+    "",
+    "REGRAS ABSOLUTAS",
+    "- Seja direto, sem enrolação",
+    "- Evite teoria longa",
+    "- Nada de linguagem robótica",
+    "- Nada de frases genéricas",
+    "- Não bajule",
+    "- Não force romantização",
+    "- Priorize leveza + confiança + provocação sutil",
+    "",
+    "MODO 1 — CONTINUAÇÃO (prints de conversa)",
+    "FORMATO:",
+    "LEITURA RÁPIDA (1–2 linhas)",
+    "NÍVEL DE INTERESSE DELA (baixo/médio/alto + justificativa curta)",
+    "ERRO DO USUÁRIO (se houver)",
+    "MELHOR RESPOSTA PARA ENVIAR",
+    "VARIAÇÕES (máx 2)",
+    "",
+    "MODO 2 — ABORDAGEM (perfil)",
+    "FORMATO:",
+    "LEITURA DO PERFIL (vibe dela em 1–2 linhas)",
+    "ESTRATÉGIA (como abordar: direto/provocativo/leve etc.)",
+    "ABORDAGEM IDEAL (mensagem pronta)",
+    "VARIAÇÕES (máx 2)",
+    "",
+    "REGRAS DE INTELIGÊNCIA SOCIAL",
+    "- Se o interesse for baixo → reduzir investimento",
+    "- Se for médio → gerar curiosidade",
+    "- Se for alto → avançar para encontro",
+    "- Evitar parecer disponível demais",
+    "- Manter valor percebido alto",
+    "",
+    "SAÍDA",
+    "Entregue respostas curtas, naturais e prontas para copiar e enviar.",
+    "",
+    "ENTRADA (texto extraído/colado):",
     `Contexto: ${contextText}.`,
+    `Objetivo (se aplicável): ${goal}.`,
     `Tom: ${styleTone(style)}.`,
     `Ousadia: ${spice === "high" ? "ousado" : spice === "low" ? "leve" : "médio"}.`,
     `Evitar: ${avoidRule(avoidSet)}.`,
     goal === "reengajar" && noReplyText ? `Tempo sem resposta: ${noReplyText}.` : "",
+    normalizeText(place) ? `Local: ${clamp(place, 80)}.` : "",
+    whenText ? `Quando: ${clamp(whenText, 80)}.` : "",
     "",
-    "Formato de resposta (obrigatório):",
-    "1) Análise da situação",
-    "2) O que está acontecendo (nível de interesse dela)",
-    "3) Erros potenciais do usuário",
-    "4) Melhor estratégia",
-    "5) Sugestão prática de resposta (A/B/C)",
-    "6) Explicação do porquê",
+    "Perfil (bio/texto):",
+    profile ? clamp(profile, 900) : "(vazio)",
     "",
-    "Entregue 3 opções A/B/C de próxima mensagem curtas e naturais, e diga qual é a melhor e por quê.",
-  ].join("\n");
-
-  const details = [
+    "Instagram (story/assunto):",
+    igStory ? clamp(igStory, 500) : "(vazio)",
     "",
-    "Perfil dela:",
-    profile ? clamp(profile, 700) : "(vazio)",
+    "Última mensagem dela:",
+    lastHer ? clamp(lastHer, 300) : "(vazio)",
     "",
-    "Instagram (story/assunto que vou responder):",
-    igStory ? clamp(igStory, 360) : "(vazio)",
-    "",
-    "Última mensagem dela (se tiver):",
-    lastHer ? clamp(lastHer, 220) : "(vazio)",
-    "",
-    "Conversa:",
-    chat ? clamp(chat, 1600) : "(vazio)",
-  ];
-
-  const placeBit = normalizeText(place) ? ["", `Local: ${clamp(place, 80)}`] : [];
-  const whenText = formatWhen({ when: dateWhen, time: dateTime });
-  const whenBit = whenText ? ["", `Quando: ${clamp(whenText, 80)}`] : [];
-  const datePrefs = [
+    "Conversa (texto):",
+    chat ? clamp(chat, 2200) : "(vazio)",
     "",
     `Preferência de encontro: ${describeDateType(dateType)}.`,
     `Orçamento: ${budget}.`,
-  ];
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-  return [header, ...details, ...placeBit, ...whenBit, ...datePrefs].join("\n");
+  return header.trim();
 }
 
 function setOptions(options, { recommendedKey, showAll = true } = {}) {
@@ -2223,8 +2409,26 @@ function generate() {
   const budget = el.budget.value;
 
   const hook = extractHook(profile);
-  const chat = parseChat(chatText, { meName: el.meName?.value, herName: el.herName?.value });
-  if (lastHerText) {
+  const chatImageFile = el.chatImage?.files?.[0] ?? null;
+  const profileImageFile = el.profileImage?.files?.[0] ?? null;
+  const mode = detectInputMode({
+    chatText,
+    lastHerText,
+    igStory,
+    chatImageFile,
+    profileText: profile,
+    profileImageFile,
+  });
+
+  if (mode === "NONE") {
+    if (el.winnerHint) el.winnerHint.textContent = "Adicione um print da conversa ou do perfil e toque em “Extrair texto”.";
+    setOptions([], { recommendedKey: null, showAll: true });
+    return;
+  }
+
+  const effectiveChatText = mode === "CONTINUAÇÃO" ? chatText : "";
+  const chat = parseChat(effectiveChatText, { meName: el.meName?.value, herName: el.herName?.value });
+  if (mode === "CONTINUAÇÃO" && lastHerText) {
     chat.lastSpeaker = "her";
     chat.lastHer = lastHerText;
   }
@@ -2249,7 +2453,15 @@ function generate() {
     optionsWithWins[0];
   setOptions(optionsWithWins, { recommendedKey: recommendedOption?.key, showAll: showAllOptions });
   if (el.winnerHint) {
-    el.winnerHint.textContent = recommendedOption ? `Recomendação: ${recommendedOption.key}.` : "";
+    const variations = optionsWithWins
+      .filter((o) => o && o.key !== recommendedOption?.key)
+      .slice(0, 2)
+      .map((o) => normalizeText(o.text))
+      .filter(Boolean);
+    el.winnerHint.textContent =
+      mode === "ABORDAGEM"
+        ? buildAbordagemReport({ profile, style, spice, avoidSet, recommendedOption, variations })
+        : buildContinuacaoReport({ chat, diag, recommendedOption, variations });
   }
   if (el.copyWinner) {
     el.copyWinner.onclick = async () => {
@@ -2333,7 +2545,7 @@ function generate() {
   };
 }
 
-el.generate.addEventListener("click", () => {
+el.generate.addEventListener("click", async () => {
   scrollToResultsOnce = true;
   manualGenerate = true;
   const previous = el.generate.textContent;
@@ -2344,10 +2556,10 @@ el.generate.addEventListener("click", () => {
     const hasIgStory = Boolean(normalizeText(el.igStory?.value));
     const hasProfile = Boolean(normalizeText(el.profile?.value));
     const hasChatImage = Boolean(el.chatImage?.files?.[0]);
+    const hasProfileImage = Boolean(el.profileImage?.files?.[0]);
 
-    if (!hasChatText && !hasIgStory && !hasProfile && hasChatImage && !("TextDetector" in window)) {
-      setOcrStatus("No iPhone: toque e segure no texto do print (Live Text), copie e use “Colar texto”.");
-    }
+    if (hasChatImage && !hasChatText && !hasIgStory) await extractChatFromImage();
+    if (hasProfileImage && !hasProfile && !hasChatText && !hasIgStory) await extractProfileFromImage();
     generate();
     if (el.options?.children?.length === 0) {
       setUserStatus("Não consegui gerar opções: tente “Colar texto” ou abra Ajustes e cole a conversa.");
@@ -2614,19 +2826,9 @@ if (el.chatImage) {
       setOcrStatus("");
       return;
     }
-    const canOcr = "TextDetector" in window;
-    setOcrStatus(
-      canOcr
-        ? `Imagem selecionada: ${file.name}`
-        : `Imagem selecionada: ${file.name}. No iPhone, toque e segure no texto do print (Live Text) e use “Colar texto”.`
-    );
-    if (canOcr) {
-      extractChatFromImage();
-      return;
-    }
-    setUserStatus("Print ok. No iPhone: toque e segure no preview, copie o texto e use “Colar texto”.");
+    setOcrStatus(`Imagem selecionada: ${file.name}`);
     scrollToResultsOnce = true;
-    generate();
+    extractChatFromImage();
   });
 }
 
@@ -2657,19 +2859,9 @@ if (el.profileImage) {
       setProfileOcrStatus("");
       return;
     }
-    const canOcr = "TextDetector" in window;
-    setProfileOcrStatus(
-      canOcr
-        ? `Imagem selecionada: ${file.name}`
-        : `Imagem selecionada: ${file.name}. No iPhone, toque e segure no texto do print (Live Text) e use “Colar texto”.`
-    );
-    if (canOcr) {
-      extractProfileFromImage();
-      return;
-    }
-    setUserStatus("Perfil ok. No iPhone: toque e segure no preview, copie o texto e use “Colar texto”.");
+    setProfileOcrStatus(`Imagem selecionada: ${file.name}`);
     scrollToResultsOnce = true;
-    generate();
+    extractProfileFromImage();
   });
 }
 
@@ -2941,7 +3133,7 @@ const isSecure =
   window.location.hostname === "localhost" ||
   window.location.hostname === "127.0.0.1";
 
-const APP_VERSION = "38";
+const APP_VERSION = "40";
 const SW_URL = `./service-worker.js?v=${APP_VERSION}`;
 
 function updateInstallHints() {

@@ -1,4 +1,4 @@
-const CACHE_NAME = "paquera-pwa-v38";
+const CACHE_NAME = "paquera-pwa-v40";
 const ASSETS = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest", "./icon.svg"];
 
 self.addEventListener("install", (event) => {
