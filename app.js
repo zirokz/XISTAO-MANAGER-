@@ -3115,7 +3115,7 @@ const isSecure =
   window.location.hostname === "localhost" ||
   window.location.hostname === "127.0.0.1";
 
-const APP_VERSION = "42";
+const APP_VERSION = "43";
 const SW_URL = `./service-worker.js?v=${APP_VERSION}`;
 
 function updateInstallHints() {

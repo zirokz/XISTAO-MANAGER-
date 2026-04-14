@@ -39,7 +39,7 @@
             </div>
           </div>
 
-          <label class="field">
+          <label class="field hidden">
             <span class="label">Print da conversa (recomendado)</span>
             <input id="chatImage" type="file" accept="image/*" />
             <div class="row">
@@ -52,7 +52,7 @@
             <img id="chatImagePreview" class="imagePreview hidden" alt="Preview do print da conversa" />
           </label>
 
-          <label class="field">
+          <label class="field hidden">
             <span class="label">Print do perfil dela (recomendado)</span>
             <input id="profileImage" type="file" accept="image/*" />
             <div class="row">
@@ -75,6 +75,26 @@
               autocorrect="off"
               spellcheck="false"
             ></textarea>
+          </label>
+
+          <label class="field">
+            <span class="label">Conversa (cole as últimas mensagens)</span>
+            <textarea
+              id="chat"
+              rows="8"
+              autocapitalize="off"
+              autocorrect="off"
+              spellcheck="false"
+              placeholder="Dica: comece as linhas com “Eu:” e “Ela:”
+Ex.:
+Eu: Oi, achei teu perfil massa
+Ela: kkk valeu"
+            ></textarea>
+          </label>
+
+          <label class="field">
+            <span class="label">Última mensagem dela (opcional)</span>
+            <textarea id="lastHer" rows="2" placeholder="Ex.: ‘kkkk gostei’ ou ‘e você, mora onde?’" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
           </label>
 
           <div id="detailsFields" class="detailsFields hidden">
@@ -134,11 +154,6 @@
               <textarea id="igStory" rows="3" placeholder="Ex.: Foto do café / show ontem / viagem / treino / texto do story…" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
             </label>
 
-            <label class="field">
-              <span class="label">Última mensagem dela (opcional, pra gerar mais rápido)</span>
-              <textarea id="lastHer" rows="2" placeholder="Ex.: ‘kkkk gostei’ ou ‘e você, mora onde?’" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
-            </label>
-
             <label class="field hidden" id="noReplyField">
               <span class="label">Tempo sem resposta (pra reengajar melhor)</span>
               <select id="noReply">
@@ -159,21 +174,6 @@
                 <input id="herName" type="text" placeholder="Ex.: Ana" />
               </label>
             </div>
-
-            <label class="field">
-              <span class="label">Conversa (cole as últimas mensagens)</span>
-              <textarea
-                id="chat"
-                rows="8"
-                autocapitalize="off"
-                autocorrect="off"
-                spellcheck="false"
-                placeholder="Dica: comece as linhas com “Eu:” e “Ela:”
-Ex.:
-Eu: Oi, achei teu perfil massa
-Ela: kkk valeu"
-              ></textarea>
-            </label>
 
             <div class="row">
               <label class="check inline"><input id="privacyMode" type="checkbox" /> <span>Modo privacidade (não salvar conversa automaticamente)</span></label>
