@@ -509,19 +509,45 @@ function renderCaseList(cases) {
 }
 
 async function fileToImageSource(file) {
-  if (typeof createImageBitmap === "function") {
-    const bmp = await createImageBitmap(file);
-    return { source: bmp, cleanup: () => bmp.close?.() };
+  const isIosUA = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (!isIosUA && typeof createImageBitmap === "function") {
+    try {
+      const bmp = await createImageBitmap(file);
+      return { source: bmp, cleanup: () => bmp.close?.() };
+    } catch {}
   }
   return await new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
-    img.onload = () => resolve({ source: img, cleanup: () => URL.revokeObjectURL(url) });
+    const timer = window.setTimeout(() => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Tempo limite ao carregar imagem."));
+    }, 8000);
+    img.onload = () => {
+      window.clearTimeout(timer);
+      resolve({ source: img, cleanup: () => URL.revokeObjectURL(url) });
+    };
     img.onerror = () => {
+      window.clearTimeout(timer);
       URL.revokeObjectURL(url);
       reject(new Error("Falha ao carregar imagem."));
     };
     img.src = url;
+  });
+}
+
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error("timeout")), ms);
+    Promise.resolve(promise)
+      .then((v) => {
+        window.clearTimeout(timer);
+        resolve(v);
+      })
+      .catch((e) => {
+        window.clearTimeout(timer);
+        reject(e);
+      });
   });
 }
 
@@ -530,7 +556,7 @@ async function ocrUsingTextDetector(file) {
   const detector = new window.TextDetector();
   const { source, cleanup } = await fileToImageSource(file);
   try {
-    const detections = await detector.detect(source);
+    const detections = await withTimeout(detector.detect(source), 9000);
     const lines = (detections ?? [])
       .map((d) => {
         const text = normalizeText(d?.rawValue);
@@ -541,64 +567,6 @@ async function ocrUsingTextDetector(file) {
       .filter((x) => x.text);
     lines.sort((a, b) => a.y - b.y || a.x - b.x);
     return lines.map((l) => l.text).join("\n").trim();
-  } finally {
-    cleanup?.();
-  }
-}
-
-let tesseractLoadPromise = null;
-function loadScriptOnce(url, marker) {
-  const existing = document.querySelector(`script[data-loader=\"${marker}\"]`);
-  if (existing) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const s = document.createElement("script");
-    s.src = url;
-    s.async = true;
-    s.defer = true;
-    s.dataset.loader = marker;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error("Falha ao carregar OCR."));
-    document.head.appendChild(s);
-  });
-}
-
-async function ensureTesseract() {
-  if (window.Tesseract?.recognize) return window.Tesseract;
-  if (!tesseractLoadPromise) {
-    tesseractLoadPromise = loadScriptOnce("https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js", "tesseract");
-  }
-  await tesseractLoadPromise;
-  return window.Tesseract?.recognize ? window.Tesseract : null;
-}
-
-async function ocrUsingTesseract(file, setStatusFn) {
-  const Tesseract = await ensureTesseract();
-  if (!Tesseract) return null;
-  const { source, cleanup } = await fileToImageSource(file);
-  try {
-    const resPor = await Tesseract.recognize(source, "por", {
-      logger: (m) => {
-        const p = Number(m?.progress ?? 0);
-        if (m?.status && Number.isFinite(p)) {
-          const pct = Math.round(p * 100);
-          setStatusFn?.(`${m.status}… ${pct}%`);
-        }
-      },
-    }).catch(() => null);
-    const textPor = normalizeText(resPor?.data?.text);
-    if (textPor) return textPor;
-
-    const resEng = await Tesseract.recognize(source, "eng", {
-      logger: (m) => {
-        const p = Number(m?.progress ?? 0);
-        if (m?.status && Number.isFinite(p)) {
-          const pct = Math.round(p * 100);
-          setStatusFn?.(`${m.status}… ${pct}%`);
-        }
-      },
-    }).catch(() => null);
-    const textEng = normalizeText(resEng?.data?.text);
-    return textEng || null;
   } finally {
     cleanup?.();
   }
@@ -631,11 +599,18 @@ async function extractChatFromImage() {
     return;
   }
 
+  if (!("TextDetector" in window)) {
+    setOcrStatus("Neste iPhone, o OCR automático não está disponível. Abra o print no app Fotos e copie o texto (ícone de texto), depois use “Colar texto”.");
+    setUserStatus("OCR não disponível. Abra Ajustes e cole a conversa no campo “Conversa”.");
+    setDetailsOpen(true);
+    return;
+  }
+
   setOcrStatus("Extraindo texto…");
   try {
-    const text = (await ocrUsingTextDetector(file)) || (await ocrUsingTesseract(file, setOcrStatus));
+    const text = await ocrUsingTextDetector(file);
     if (!text) {
-      setOcrStatus("Não consegui extrair o texto deste print. Se possível, cole a conversa manualmente.");
+      setOcrStatus("Não consegui extrair desse print. Tente um print mais nítido ou use copiar/colar pelo app Fotos.");
       setUserStatus("OCR falhou. Abra Ajustes e cole a conversa no campo “Conversa”.");
       setDetailsOpen(true);
       return;
@@ -668,11 +643,18 @@ async function extractProfileFromImage() {
     return;
   }
 
+  if (!("TextDetector" in window)) {
+    setProfileOcrStatus("Neste iPhone, o OCR automático não está disponível. Abra o print no app Fotos e copie o texto (ícone de texto), depois use “Colar texto”.");
+    setUserStatus("OCR não disponível. Cole o texto do perfil no campo “Perfil dela”.");
+    setDetailsOpen(true);
+    return;
+  }
+
   setProfileOcrStatus("Extraindo texto…");
   try {
-    const text = (await ocrUsingTextDetector(file)) || (await ocrUsingTesseract(file, setProfileOcrStatus));
+    const text = await ocrUsingTextDetector(file);
     if (!text) {
-      setProfileOcrStatus("Não consegui extrair o texto deste print. Se possível, cole a bio manualmente.");
+      setProfileOcrStatus("Não consegui extrair desse print. Tente um print mais nítido ou use copiar/colar pelo app Fotos.");
       setUserStatus("OCR falhou. Cole o texto do perfil no campo “Perfil dela”.");
       setDetailsOpen(true);
       return;
@@ -3133,7 +3115,7 @@ const isSecure =
   window.location.hostname === "localhost" ||
   window.location.hostname === "127.0.0.1";
 
-const APP_VERSION = "40";
+const APP_VERSION = "42";
 const SW_URL = `./service-worker.js?v=${APP_VERSION}`;
 
 function updateInstallHints() {
@@ -3172,7 +3154,7 @@ if ("serviceWorker" in navigator) {
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    window.location.reload();
+    setUserStatus("Atualização aplicada. Se algo ficar estranho, toque em “Atualizar app”.");
   });
 }
 
